@@ -7,14 +7,16 @@
 
 #include "DHT.h"
 
-const char *ssid = "Main_Program_24GHZ";
-const char *password = "nuncadigasnunca2007";
+const char *ssid = "";
+const char *password = "";
 
 #define DHTTYPE DHT22  // DHT 22  (AM2302), AM2321
 const int DHTPin = 32; // what digital pin we're connected to
 
 // Create AsyncWebServer object on port 80
 AsyncWebServer server(80);
+// Create a WebSocket object
+AsyncWebSocket ws("/ws");
 
 DHT dht(DHTPin, DHTTYPE);
 
@@ -24,38 +26,17 @@ bool newPID = false;
 
 uint32_t time_loop = 0;
 
-String readDHT22()
-{
-  char auxData[512];
-  memset(auxData, 0, sizeof(auxData));
-  sprintf(auxData, "{\"temp\":%.2f,\"hum\":%.2f}", temp, hum);
-  String tosend = String(auxData);
-
-  return tosend;
-}
+String readDHT22(void);
+void initSPIFFS(void);
+void initWiFi(void);
 
 void setup()
 {
   Serial.begin(115200);
   Serial.println("DHTxx test!");
 
-  // Initialize SPIFFS
-  if (!SPIFFS.begin(true))
-  {
-    Serial.println("An Error has occurred while mounting SPIFFS");
-    return;
-  }
-
-  // Connect to Wi-Fi
-  WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED)
-  {
-    delay(1000);
-    Serial.println("Connecting to WiFi..");
-  }
-
-  // Print ESP32 Local IP Address
-  Serial.println(WiFi.localIP());
+  initWiFi();
+  initSPIFFS();
 
   // Route for root / web page
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request)
@@ -121,4 +102,38 @@ void loop()
     Serial.println(d);
     newPID = false;
   }
+
+}
+
+
+String readDHT22()
+{
+  char auxData[512];
+  memset(auxData, 0, sizeof(auxData));
+  sprintf(auxData, "{\"temp\":%.2f,\"hum\":%.2f}", temp, hum);
+  String tosend = String(auxData);
+
+  return tosend;
+}
+
+// Initialize SPIFFS
+void initSPIFFS() 
+{
+  if (!SPIFFS.begin(true)) {
+    Serial.println("An error has occurred while mounting SPIFFS");
+  }
+  Serial.println("SPIFFS mounted successfully");
+}
+
+// Initialize WiFi
+void initWiFi() 
+{
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(ssid, password);
+  Serial.print("Connecting to WiFi ..");
+  while (WiFi.status() != WL_CONNECTED) {
+    Serial.print('.');
+    delay(1000);
+  }
+  Serial.println(WiFi.localIP());
 }
