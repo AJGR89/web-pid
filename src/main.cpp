@@ -1,14 +1,5 @@
 #include <Arduino.h>
-
-// Import required libraries
-#include "WiFi.h"
-#include "ESPAsyncWebServer.h"
-#include "SPIFFS.h"
-
-#include "DHT.h"
-
-const char *ssid = "";
-const char *password = "";
+#include "main.h"
 
 #define DHTTYPE DHT22  // DHT 22  (AM2302), AM2321
 const int DHTPin = 32; // what digital pin we're connected to
@@ -26,14 +17,25 @@ bool newPID = false;
 
 uint32_t time_loop = 0;
 
+// WiFi connections FSM
+WiFiState wifiState = DISCONNECTED;
+unsigned long lastAttemptTime = 0;
+const unsigned long attemptInterval = 1000;
+int connect_count = 0;
+
 String readDHT22(void);
 void initSPIFFS(void);
 void initWiFi(void);
+void handleWiFiConnection(void);
 
 void setup()
 {
   Serial.begin(115200);
-  Serial.println("DHTxx test!");
+  DBGINI(&Serial, ESP32Timestamp::TimestampNone);
+  DBGSTA
+  DBGLEV(Debug);
+
+  DBGLOG(Info, "PID -Web config start!!");
 
   initWiFi();
   initSPIFFS();
@@ -68,6 +70,8 @@ void setup()
 
 void loop()
 {
+  handleWiFiConnection();
+
   if (millis() - time_loop > 10000)
   {
     // Reading temperature or humidity takes about 250 milliseconds!
@@ -76,35 +80,23 @@ void loop()
 
     if (isnan(h) || isnan(t))
     {
-      Serial.println("Failed to read from DHT sensor!");
+      DBGLOG(Error, "Failed to read from DHT sensor!");
     }
     else
     {
       temp = t;
       hum = h;
-      Serial.print("Humidity: ");
-      Serial.print(h);
-      Serial.print(" %\t");
-      Serial.print("Temperature: ");
-      Serial.print(t);
-      Serial.println(" *C ");
+      DBGLOG(Debug, "Humidity: %.2f %\tTemperature: %.2f ºC", hum, temp);
     }
     time_loop = millis();
   }
 
   if (newPID)
   {
-    Serial.print("New PID parameters-> P:");
-    Serial.print(p);
-    Serial.print(" I: ");
-    Serial.print(i);
-    Serial.print(" D: ");
-    Serial.println(d);
+    DBGLOG(Debug, "New PID parameters-> P: %.2f, I: %.2f, D: %.2f", p, i, d);
     newPID = false;
   }
-
 }
-
 
 String readDHT22()
 {
@@ -117,23 +109,81 @@ String readDHT22()
 }
 
 // Initialize SPIFFS
-void initSPIFFS() 
+void initSPIFFS()
 {
-  if (!SPIFFS.begin(true)) {
-    Serial.println("An error has occurred while mounting SPIFFS");
+  if (!SPIFFS.begin(true))
+  {
+    DBGLOG(Error, "An error has occurred while mounting SPIFFS");
   }
-  Serial.println("SPIFFS mounted successfully");
+  DBGLOG(Info, "SPIFFS mounted successfully");
 }
 
 // Initialize WiFi
-void initWiFi() 
+void initWiFi()
 {
   WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid, password);
-  Serial.print("Connecting to WiFi ..");
-  while (WiFi.status() != WL_CONNECTED) {
-    Serial.print('.');
+  WiFi.begin(SSID, PASS);
+
+  DBGLOG(Info, "Connecting to WiFi (...)");
+  wifiState = CONNECTING;
+  while (WiFi.status() != WL_CONNECTED)
+  {
     delay(1000);
   }
-  Serial.println(WiFi.localIP());
+  wifiState = CONNECTED;
+  IPAddress ip = WiFi.localIP();
+  String s = ip.toString();
+  DBGLOG(Debug, "WiFi connected, IP address: %s", s.c_str());
+}
+
+void handleWiFiConnection()
+{
+  static uint8_t first_connect = 0;
+  static unsigned long lastDisconnectTime = 0;
+
+  switch (wifiState)
+  {
+  case DISCONNECTED:
+    DBGLOG(Debug, "Connecting to:  %s with: %s", SSID, PASS);
+    WiFi.begin(SSID, PASS);
+    wifiState = CONNECTING;
+    lastAttemptTime = millis();
+    break;
+
+  case CONNECTING:
+    if (WiFi.status() == WL_CONNECTED)
+    {
+      wifiState = CONNECTED;
+      DBGLOG(Info, "   WiFi connected");
+      IPAddress ip = WiFi.localIP();
+      String s = ip.toString();
+      DBGLOG(Debug, "WiFi connected, IP address: %s", s.c_str());
+    }
+    else if (millis() - lastAttemptTime >= attemptInterval)
+    {
+      lastAttemptTime = millis();
+      connect_count++;
+      if (connect_count > 180)
+      {
+        wifiState = DISCONNECTED;
+        connect_count = 0;
+      }
+    }
+    break;
+
+  case CONNECTED:
+    // If you need to do something periodically when you're online, you can do it here.
+    if (WiFi.status() != WL_CONNECTED && millis() - lastDisconnectTime > 30000)
+    {
+      DBGLOG(Info, "WiFi disconnected for more than 30 seconds. Reconnecting...");
+      wifiState = DISCONNECTED;
+      lastDisconnectTime = millis(); // Update disconnection time
+    }
+
+    if (!first_connect)
+    {
+      first_connect = 1;
+    }
+    break;
+  }
 }
