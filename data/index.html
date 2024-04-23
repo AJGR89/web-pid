@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PID - Web config</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  </head>
+  <style>
+    .container {
+      padding: 5px;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    .chart-box {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+    }
+    .controls-box {
+      margin-top: 50px;
+      display: flex;
+    }
+    .panel {
+      flex: 1;
+      flex-direction: column;
+      border: 1px solid #ccc;
+      margin-right: 10px;
+      padding: 10px;
+    }
+    .panel-row {
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+    }
+    .panel-row label {
+      width: 100px;
+    }
+
+    .panel-row input[type="text"] {
+      width: 40px;
+    }
+    .text-green{
+      font-size: 1.2em;
+      color: #05c46b;
+      font-weight: bold;
+      
+    }
+    .text-blue{
+      font-size: 1.2em;
+      color: #0fbcf9;
+      font-weight: bold;
+    }
+   
+  </style>
+  <body>
+    <div class="container">
+      <div class="chart-box">
+        <h3>GRAPH</h3>
+        <canvas id="myChart" width="70%" height="20%"></canvas>
+      </div>
+      <div class="controls-box">
+        <div class="panel">
+          <div class="titulo">
+            <h3>P,I,D Setpoints</h3>
+          </div>
+          <div class="formulario">
+            <form id="pid-form">
+              <div class="panel-row">
+                <label for="p_value">Enter P value:</label>
+                <input type="text" name="p_value" id="p_value"/>
+              </div>
+              <div class="panel-row">
+                <label for="i_value">Enter I value:</label>
+                <input type="text" name="i_value" id="i_value"/>
+              </div>
+              <div class="panel-row">
+                <label for="d_value">Enter D value:</label>
+                <input type="text" name="d_value" id="d_value"/>
+              </div>
+              <div class="panel-row">
+                <button type="button" onclick="formValidate()">
+                  Submit to Arduino Button
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="titulo">
+            <h3>Live Sensor Data text boxes</h3>
+          </div>
+          <div class="formulario">
+            <form action="">
+              <div class="panel-row">
+                <label for="temp_value">Temperature: </label>
+                <p class="text-blue" id="temp_value"> -- ºC</p>
+              </div>
+              <div class="panel-row">
+                <label for="hum_value">Humidity: </label>
+                <p class="text-green" id="hum_value">-- %</p>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // Supongamos que tienes un arreglo llamado 'datos' con los datos que recibiste
+      const maxPuntos = 1024;
+      let puntos = [];
+
+      // Configuración del gráfico
+      const ctx = document.getElementById("myChart").getContext("2d");
+      const myChart = new Chart(ctx, {
+        type: "line",
+        data: {
+          labels: [],
+          datasets: [
+            {
+              label: "Temp",
+              data: [],
+              borderColor: "#0fbcf9",
+              borderWidth: 1,
+              pointRadius: 0,
+            },
+            {
+              label: "Hum",
+              data: [],
+              borderColor: "#05c46b",
+              borderWidth: 1,
+              pointRadius: 0,
+            },
+          ],
+        },
+        options: {
+          scales: {
+            x: {
+              title: {
+                display: true,
+                text: "Tiempo (segundos)",
+              },
+              ticks: {
+                maxTicksLimit: 10,
+              },
+            },
+            y: {
+              min: 0,
+              max: 100,
+              title: {
+                display: true,
+                text: "Valor",
+              },
+            },
+          },
+        },
+      });
+
+      const addPoints = (currentTime, values) => {
+        const temp = values[0];
+        const hum = values[1];
+        puntos.push({ currentTime, temp, hum });
+
+        if (puntos.length > maxPuntos) {
+          puntos.shift();
+        }
+
+        myChart.data.labels = puntos.map((point) => point.currentTime);
+        myChart.data.datasets[0].data = puntos.map((point) => point.temp);
+        myChart.data.datasets[1].data = puntos.map((point) => point.hum);
+        myChart.update();
+      };
+
+      const preparePoints = (values) => {
+        const unix_timestamp = new Date();
+        const current_hour = unix_timestamp.getHours().toString().padStart(2, '0');;
+        const current_minutes = unix_timestamp.getMinutes().toString().padStart(2, '0');;
+        const current_seconds = unix_timestamp.getSeconds().toString().padStart(2, '0');;
+
+        const currentTime = `${current_hour}:${current_minutes}:${current_seconds}`;
+
+        addPoints(currentTime, values);
+      };
+
+      function formValidate() {
+        let p_value =
+          document.getElementById("pid-form").elements["p_value"].value;
+        let d_value =
+          document.getElementById("pid-form").elements["d_value"].value;
+        let i_value =
+          document.getElementById("pid-form").elements["i_value"].value;
+
+        if (
+          p_value.trim() === "" ||
+          d_value.trim() === "" ||
+          i_value.trim() === ""
+        ) {
+          alert("Please complete all fields.");
+          return false;
+        }
+        if (
+          isNaN(parseInt(p_value, 10)) ||
+          isNaN(parseInt(d_value, 10)) ||
+          isNaN(parseInt(i_value, 10))
+        ) {
+          alert("P, I, D values must be numerical");
+          return false;
+        }
+
+        let formData = new FormData(document.getElementById("pid-form"));
+
+        fetch("/data", {
+          method: "POST",
+          body: formData,
+        })
+          .then((response) => {
+            if (response.ok) {
+              return response.json();
+            } else {
+              throw new Error("Error sending request");
+            }
+          })
+          .then((data) => {
+            console.log(data);
+          })
+          .catch((error) => {
+            console.error("Error:", error);
+          });
+      }
+
+      function getdata() {
+
+        let temp = document.getElementById("temp_value");
+        let hum = document.getElementById("hum_value");
+
+        fetch("/data", {
+          method: "GET",
+        })
+          .then((response) => {
+            if (response.ok) {
+              return response.json();
+            } else {
+              throw new Error("Error sending request");
+            }
+          })
+          .then((data) => {
+            temp.textContent = `${data.temp} ºC`
+            hum.textContent = `${data.hum} %`
+            preparePoints([data.temp,data.hum]);
+          })
+          .catch((error) => {
+            console.error("Error:", error);
+          });
+      }
+
+      getdata();
+      setInterval(getdata,30000);
+    </script>
+  </body>
+</html>
