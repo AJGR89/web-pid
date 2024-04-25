@@ -43,22 +43,20 @@
     .panel-row input[type="text"] {
       width: 40px;
     }
-    .text-green{
+    .text-green {
       font-size: 1.2em;
       color: #05c46b;
       font-weight: bold;
-      
     }
-    .text-blue{
+    .text-blue {
       font-size: 1.2em;
       color: #0fbcf9;
       font-weight: bold;
     }
-    .lastupdated{
+    .lastupdated {
       font-style: italic;
       color: #3c40c6;
     }
-   
   </style>
   <body>
     <div class="container">
@@ -75,15 +73,15 @@
             <form id="pid-form">
               <div class="panel-row">
                 <label for="p_value">Enter P value:</label>
-                <input type="text" name="p_value" id="p_value"/>
+                <input type="text" name="p_value" id="p_value" />
               </div>
               <div class="panel-row">
                 <label for="i_value">Enter I value:</label>
-                <input type="text" name="i_value" id="i_value"/>
+                <input type="text" name="i_value" id="i_value" />
               </div>
               <div class="panel-row">
                 <label for="d_value">Enter D value:</label>
-                <input type="text" name="d_value" id="d_value"/>
+                <input type="text" name="d_value" id="d_value" />
               </div>
               <div class="panel-row">
                 <button type="button" onclick="formValidate()">
@@ -96,13 +94,13 @@
         <div class="panel">
           <div class="titulo">
             <h3>Live Sensor Data text boxes</h3>
-            <p class="lastupdated" id="lastupdated">Last updated: </p>
+            <p class="lastupdated" id="lastupdated">Last updated:</p>
           </div>
           <div class="formulario">
             <form action="">
               <div class="panel-row">
                 <label for="temp_value">Temperature: </label>
-                <p class="text-blue" id="temp_value"> -- ºC</p>
+                <p class="text-blue" id="temp_value">-- ºC</p>
               </div>
               <div class="panel-row">
                 <label for="hum_value">Humidity: </label>
@@ -184,11 +182,20 @@
         const unix_timestamp = new Date();
         const current_year = unix_timestamp.getFullYear().toString();
         const month = unix_timestamp.getMonth() + 1;
-        const current_month = month.toString().padStart(2, '0');
-        const current_day = unix_timestamp.getDay().toString().padStart(2, '0');
-        const current_hour = unix_timestamp.getHours().toString().padStart(2, '0');
-        const current_minutes = unix_timestamp.getMinutes().toString().padStart(2, '0');
-        const current_seconds = unix_timestamp.getSeconds().toString().padStart(2, '0');
+        const current_month = month.toString().padStart(2, "0");
+        const current_day = unix_timestamp.getDay().toString().padStart(2, "0");
+        const current_hour = unix_timestamp
+          .getHours()
+          .toString()
+          .padStart(2, "0");
+        const current_minutes = unix_timestamp
+          .getMinutes()
+          .toString()
+          .padStart(2, "0");
+        const current_seconds = unix_timestamp
+          .getSeconds()
+          .toString()
+          .padStart(2, "0");
 
         const lastupdated = document.getElementById("lastupdated");
         lastupdated.innerHTML = `Last Updated: <strong>${current_year}/${current_month}/${current_day} ${current_hour}:${current_minutes}:${current_seconds}</strong>`;
@@ -225,7 +232,7 @@
 
         let formData = new FormData(document.getElementById("pid-form"));
 
-        fetch("/data", {
+        fetch("/keys", {
           method: "POST",
           body: formData,
         })
@@ -237,15 +244,16 @@
             }
           })
           .then((data) => {
-            console.log(data);
+            if(data.status ==="0k")
+              alert("constants set correctly")
+            return;
           })
           .catch((error) => {
             console.error("Error:", error);
-          });
+          })
       }
 
       function getdata() {
-
         let temp = document.getElementById("temp_value");
         let hum = document.getElementById("hum_value");
 
@@ -260,9 +268,35 @@
             }
           })
           .then((data) => {
-            temp.textContent = `${data.temp} ºC`
-            hum.textContent = `${data.hum} %`
-            preparePoints([data.temp,data.hum]);
+            temp.textContent = `${data.temp} ºC`;
+            hum.textContent = `${data.hum} %`;
+            preparePoints([data.temp, data.hum]);
+          })
+          .catch((error) => {
+            console.error("Error:", error);
+          });
+      }
+
+      function getconstants() {
+        let kp = document.getElementById("p_value");
+        let ki = document.getElementById("i_value");
+        let kd = document.getElementById("d_value");
+
+        fetch("/keys", {
+          method: "GET",
+        })
+          .then((response) => {
+            if (response.ok) {
+              return response.json();
+            } else {
+              throw new Error("Error sending request");
+            }
+          })
+          .then((data) => {
+            kp.value = +data.kp;
+            ki.value = +data.ki;
+            kd.value = +data.kd;
+            preparePoints([data.temp, data.hum]);
           })
           .catch((error) => {
             console.error("Error:", error);
@@ -270,7 +304,8 @@
       }
 
       getdata();
-      setInterval(getdata,30000);
+      setTimeout(getconstants,500);
+      setInterval(getdata, 30000);
     </script>
   </body>
 </html>

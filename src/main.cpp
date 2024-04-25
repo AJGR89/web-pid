@@ -23,10 +23,22 @@ unsigned long lastAttemptTime = 0;
 const unsigned long attemptInterval = 1000;
 int connect_count = 0;
 
+// PID definitions
+// Define Variables we'll be connecting to
+double Setpoint, Input, Output;
+double Kp = 2, Ki = 5, Kd = 1;
+PID controller(&Input, &Output, &Setpoint, Kp, Ki, Kd, DIRECT);
+int WindowSize = 5000;
+unsigned long windowStartTime;
+
 String readDHT22(void);
+String readKeys(void);
 void initSPIFFS(void);
 void initWiFi(void);
 void handleWiFiConnection(void);
+void initPID(void);
+void loopPID(void);
+void updateConstants(void);
 
 void setup()
 {
@@ -39,6 +51,7 @@ void setup()
 
   initWiFi();
   initSPIFFS();
+  initPID();
 
   // Route for root / web page
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request)
@@ -46,8 +59,11 @@ void setup()
 
   server.on("/data", HTTP_GET, [](AsyncWebServerRequest *request)
             { request->send(200, "text/plain", readDHT22().c_str()); });
+  
+  server.on("/keys", HTTP_GET, [](AsyncWebServerRequest *request)
+            { request->send(200, "text/plain", readKeys().c_str()); });
 
-  server.on("/data", HTTP_POST, [](AsyncWebServerRequest *request)
+  server.on("/keys", HTTP_POST, [](AsyncWebServerRequest *request)
             {
     if (request->params())
     {
@@ -71,6 +87,7 @@ void setup()
 void loop()
 {
   handleWiFiConnection();
+  loopPID();
 
   if (millis() - time_loop > 10000)
   {
@@ -94,6 +111,10 @@ void loop()
   if (newPID)
   {
     DBGLOG(Debug, "New PID parameters-> P: %.2f, I: %.2f, D: %.2f", p, i, d);
+    Kp = p;
+    Ki = i;
+    Kd = d;
+    updateConstants();
     newPID = false;
   }
 }
@@ -103,6 +124,16 @@ String readDHT22()
   char auxData[512];
   memset(auxData, 0, sizeof(auxData));
   sprintf(auxData, "{\"temp\":%.2f,\"hum\":%.2f}", temp, hum);
+  String tosend = String(auxData);
+
+  return tosend;
+}
+
+String readKeys()
+{
+  char auxData[512];
+  memset(auxData, 0, sizeof(auxData));
+  sprintf(auxData, "{\"kp\":%f,\"ki\":%f,\"kd\":%f}", Kp, Ki,Kd);
   String tosend = String(auxData);
 
   return tosend;
@@ -186,4 +217,35 @@ void handleWiFiConnection()
     }
     break;
   }
+}
+
+void initPID()
+{
+  windowStartTime = millis();
+  // initialize the variables we're linked to
+  Setpoint = 100;
+  // tell the PID to range between 0 and the full window size
+  controller.SetOutputLimits(0, WindowSize);
+  // turn the PID on
+  controller.SetMode(AUTOMATIC);
+}
+
+void loopPID()
+{
+  Input = analogRead(PIN_INPUT);
+  controller.Compute();
+
+  if (millis() - windowStartTime > WindowSize)
+  { // time to shift the Relay Window
+    windowStartTime += WindowSize;
+  }
+  if (Output < millis() - windowStartTime)
+    digitalWrite(RELAY_PIN, HIGH);
+  else
+    digitalWrite(RELAY_PIN, LOW);
+}
+
+void updateConstants(void)
+{
+  controller.SetTunings(Kp, Ki, Kd);
 }

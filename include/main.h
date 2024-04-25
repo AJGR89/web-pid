@@ -9,6 +9,7 @@
 #include "ESPAsyncWebServer.h"
 #include "SPIFFS.h"
 #include "DHT.h"
+#include <PID_v1.h>
 
 enum WiFiState
 {
@@ -16,5 +17,8 @@ enum WiFiState
     CONNECTING,
     CONNECTED
 };
+
+#define PIN_INPUT 36
+#define RELAY_PIN 2
 
 #endif
